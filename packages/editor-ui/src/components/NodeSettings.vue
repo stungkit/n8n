@@ -141,6 +141,8 @@ export default mixins(
 				nodeColor: null,
 				nodeValues: {
 					color: '#ff0000',
+					alwaysOutputData: false,
+					notesInFlow: false,
 					continueOnFail: false,
 					retryOnFail: false,
 					maxTries: 3,
@@ -162,12 +164,28 @@ export default mixins(
 						description: 'Notes to save with the node.',
 					},
 					{
+						displayName: 'Notes In Flow',
+						name: 'notesInFlow',
+						type: 'boolean',
+						default: false,
+						noDataExpression: true,
+						description: 'If activated it will display the above notes in the flow as subtitle.',
+					},
+					{
 						displayName: 'Node Color',
 						name: 'color',
 						type: 'color',
 						default: '#ff0000',
 						noDataExpression: true,
 						description: 'The color of the node in the flow.',
+					},
+					{
+						displayName: 'Always Output Data',
+						name: 'alwaysOutputData',
+						type: 'boolean',
+						default: false,
+						noDataExpression: true,
+						description: 'If activated and the node does not have any data for the first output,<br />it returns an empty item anyway. Be careful setting this on<br />IF-Nodes as it could easily cause an infinite loop.',
 					},
 					{
 						displayName: 'Retry On Fail',
@@ -419,9 +437,19 @@ export default mixins(
 						Vue.set(this.nodeValues, 'notes', this.node.notes);
 					}
 
+					if (this.node.alwaysOutputData) {
+						foundNodeSettings.push('alwaysOutputData');
+						Vue.set(this.nodeValues, 'alwaysOutputData', this.node.alwaysOutputData);
+					}
+
 					if (this.node.continueOnFail) {
 						foundNodeSettings.push('continueOnFail');
 						Vue.set(this.nodeValues, 'continueOnFail', this.node.continueOnFail);
+					}
+
+					if (this.node.notesInFlow) {
+						foundNodeSettings.push('notesInFlow');
+						Vue.set(this.nodeValues, 'notesInFlow', this.node.notesInFlow);
 					}
 
 					if (this.node.retryOnFail) {

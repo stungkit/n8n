@@ -29,8 +29,6 @@ import {
 	XYPositon,
 } from './Interface';
 
-import { get } from 'lodash';
-
 Vue.use(Vuex);
 
 export const store = new Vuex.Store({
@@ -570,6 +568,9 @@ export const store = new Vuex.Store({
 				endpoint = process.env.VUE_APP_ENDPOINT_REST;
 			}
 			return `${state.baseUrl}${endpoint}`;
+		},
+		getWebhookBaseUrl: (state): string => {
+			return state.urlBaseWebhook;
 		},
 		getWebhookUrl: (state): string => {
 			return `${state.urlBaseWebhook}${state.endpointWebhook}`;

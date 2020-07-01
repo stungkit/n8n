@@ -71,6 +71,17 @@ export class HttpRequest implements INodeType {
 					},
 				},
 			},
+			{
+				name: 'oAuth2Api',
+				required: true,
+				displayOptions: {
+					show: {
+						authentication: [
+							'oAuth2',
+						],
+					},
+				},
+			},
 		],
 		properties: [
 			{
@@ -89,6 +100,10 @@ export class HttpRequest implements INodeType {
 					{
 						name: 'Header Auth',
 						value: 'headerAuth'
+					},
+					{
+						name: 'OAuth2',
+						value: 'oAuth2'
 					},
 					{
 						name: 'None',
@@ -168,7 +183,6 @@ export class HttpRequest implements INodeType {
 				default: 'json',
 				description: 'The format in which the data gets returned from the URL.',
 			},
-
 			{
 				displayName: 'Property Name',
 				name: 'dataPropertyName',
@@ -564,6 +578,7 @@ export class HttpRequest implements INodeType {
 		const httpBasicAuth = this.getCredentials('httpBasicAuth');
 		const httpDigestAuth = this.getCredentials('httpDigestAuth');
 		const httpHeaderAuth = this.getCredentials('httpHeaderAuth');
+		const oAuth2Api = this.getCredentials('oAuth2Api');
 
 		let requestOptions: OptionsWithUri;
 		let setUiParameter: IDataObject;
@@ -634,9 +649,9 @@ export class HttpRequest implements INodeType {
 						// Paramter is empty so skip it
 						continue;
 					}
+					const sendBinaryData = this.getNodeParameter('sendBinaryData', itemIndex, false) as boolean;
 
 					if (optionData.name === 'body' && parametersAreJson === true) {
-						const sendBinaryData = this.getNodeParameter('sendBinaryData', itemIndex, false) as boolean;
 						if (sendBinaryData === true) {
 
 							const contentTypesAllowed = [
@@ -767,6 +782,7 @@ export class HttpRequest implements INodeType {
 			}
 
 			if (responseFormat === 'json') {
+
 				requestOptions.headers!['accept'] = 'application/json,text/*;q=0.99';
 			} else if (responseFormat === 'string') {
 				requestOptions.headers!['accept'] = 'application/json,text/html,application/xhtml+xml,application/xml,text/*;q=0.9, */*;q=0.1';
@@ -781,10 +797,15 @@ export class HttpRequest implements INodeType {
 			} else {
 				requestOptions.json = true;
 			}
-
 			try {
 				// Now that the options are all set make the actual http request
-				response = await this.helpers.request(requestOptions);
+
+				if (oAuth2Api !== undefined) {
+					//@ts-ignore
+					response = await this.helpers.requestOAuth2.call(this, 'oAuth2Api', requestOptions);
+				} else {
+					response = await this.helpers.request(requestOptions);
+				}
 			} catch (error) {
 				if (this.continueOnFail() === true) {
 					returnItems.push({ json: { error } });
@@ -850,7 +871,7 @@ export class HttpRequest implements INodeType {
 					returnItems.push({
 						json: {
 							[dataPropertyName]: response,
-						}
+						},
 					});
 				}
 			} else {
@@ -861,14 +882,22 @@ export class HttpRequest implements INodeType {
 						returnItem[property] = response[property];
 					}
 
-					if (typeof returnItem.body === 'string') {
-						throw new Error('Response body is not valid JSON. Change "Response Format" to "String"');
+					if (responseFormat === 'json' && typeof returnItem.body === 'string') {
+						try {
+							returnItem.body = JSON.parse(returnItem.body);
+						} catch (e) {
+							throw new Error('Response body is not valid JSON. Change "Response Format" to "String"');
+						}
 					}
 
 					returnItems.push({ json: returnItem });
 				} else {
-					if (typeof response === 'string') {
-						throw new Error('Response body is not valid JSON. Change "Response Format" to "String"');
+					if (responseFormat === 'json' && typeof response === 'string') {
+						try {
+							response = JSON.parse(response);
+						} catch (e) {
+							throw new Error('Response body is not valid JSON. Change "Response Format" to "String"');
+						}
 					}
 
 					returnItems.push({ json: response });

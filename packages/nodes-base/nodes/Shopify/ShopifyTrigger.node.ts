@@ -14,12 +14,14 @@ import {
 	shopifyApiRequest,
 } from './GenericFunctions';
 
-import { createHmac } from 'crypto';
+import {
+	createHmac,
+ } from 'crypto';
 
 export class ShopifyTrigger implements INodeType {
 	description: INodeTypeDescription = {
 		displayName: 'Shopify Trigger',
-		name: 'shopify',
+		name: 'shopifyTrigger',
 		icon: 'file:shopify.png',
 		group: ['trigger'],
 		version: 1,
