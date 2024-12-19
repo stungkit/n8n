@@ -4,7 +4,7 @@ import type {
 	INodeType,
 	INodeTypeDescription,
 } from 'n8n-workflow';
-import { NodeConnectionType } from 'n8n-workflow';
+import { NodeConnectionType, NodeOperationError } from 'n8n-workflow';
 
 import set from 'lodash/set';
 
@@ -15,6 +15,7 @@ import {
 	getValue,
 	setValue,
 } from './utils';
+import type { RedisCredential } from './types';
 
 export class Redis implements INodeType {
 	description: INodeTypeDescription = {
@@ -512,7 +513,7 @@ export class Redis implements INodeType {
 		//       have a parameter field for a path. Because it is not possible to set
 		//       array, object via parameter directly (should maybe be possible?!?!)
 		//       Should maybe have a parameter which is JSON.
-		const credentials = await this.getCredentials('redis');
+		const credentials = await this.getCredentials<RedisCredential>('redis');
 
 		const client = setupRedisClient(credentials);
 		await client.connect();
@@ -521,17 +522,30 @@ export class Redis implements INodeType {
 		const operation = this.getNodeParameter('operation', 0);
 		const returnItems: INodeExecutionData[] = [];
 
-		try {
-			if (operation === 'info') {
+		if (operation === 'info') {
+			try {
 				const result = await client.info();
 				returnItems.push({ json: convertInfoToObject(result) });
-			} else if (
-				['delete', 'get', 'keys', 'set', 'incr', 'publish', 'push', 'pop'].includes(operation)
-			) {
-				const items = this.getInputData();
+			} catch (error) {
+				if (this.continueOnFail()) {
+					returnItems.push({
+						json: {
+							error: error.message,
+						},
+					});
+				} else {
+					await client.quit();
+					throw new NodeOperationError(this.getNode(), error);
+				}
+			}
+		} else if (
+			['delete', 'get', 'keys', 'set', 'incr', 'publish', 'push', 'pop'].includes(operation)
+		) {
+			const items = this.getInputData();
 
-				let item: INodeExecutionData;
-				for (let itemIndex = 0; itemIndex < items.length; itemIndex++) {
+			let item: INodeExecutionData;
+			for (let itemIndex = 0; itemIndex < items.length; itemIndex++) {
+				try {
 					item = { json: {}, pairedItem: { item: itemIndex } };
 
 					if (operation === 'delete') {
@@ -625,14 +639,24 @@ export class Redis implements INodeType {
 						}
 						returnItems.push(item);
 					}
+				} catch (error) {
+					if (this.continueOnFail()) {
+						returnItems.push({
+							json: {
+								error: error.message,
+							},
+							pairedItem: {
+								item: itemIndex,
+							},
+						});
+						continue;
+					}
+					await client.quit();
+					throw new NodeOperationError(this.getNode(), error, { itemIndex });
 				}
 			}
-		} catch (error) {
-			throw error;
-		} finally {
-			await client.quit();
 		}
-
+		await client.quit();
 		return [returnItems];
 	}
 }
