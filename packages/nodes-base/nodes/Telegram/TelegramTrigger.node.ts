@@ -10,7 +10,6 @@ import type {
 import { NodeConnectionType } from 'n8n-workflow';
 
 import { apiRequest, getImageBySize, getSecretToken } from './GenericFunctions';
-
 import type { IEvent } from './IEvent';
 
 export class TelegramTrigger implements INodeType {
@@ -238,7 +237,10 @@ export class TelegramTrigger implements INodeType {
 			const headerSecretBuffer = Buffer.from(
 				String(headerData['x-telegram-bot-api-secret-token'] ?? ''),
 			);
-			if (!crypto.timingSafeEqual(secretBuffer, headerSecretBuffer)) {
+			if (
+				secretBuffer.byteLength !== headerSecretBuffer.byteLength ||
+				!crypto.timingSafeEqual(secretBuffer, headerSecretBuffer)
+			) {
 				const res = this.getResponseObject();
 				res.status(403).json({ message: 'Provided secret is not valid' });
 				return {
