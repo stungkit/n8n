@@ -6,7 +6,7 @@ import {
 	type FindOptionsRelations,
 	type FindOptionsWhere,
 } from '@n8n/typeorm';
-import { Credentials } from 'n8n-core';
+import { Credentials, Logger } from 'n8n-core';
 import type {
 	ICredentialDataDecryptedObject,
 	ICredentialsDecrypted,
@@ -33,12 +33,11 @@ import { NotFoundError } from '@/errors/response-errors/not-found.error';
 import { ExternalHooks } from '@/external-hooks';
 import { validateEntity } from '@/generic-helpers';
 import type { ICredentialsDb } from '@/interfaces';
-import { Logger } from '@/logging/logger.service';
-import { userHasScopes } from '@/permissions/check-access';
+import { userHasScopes } from '@/permissions.ee/check-access';
 import type { CredentialRequest, ListQuery } from '@/requests';
 import { CredentialsTester } from '@/services/credentials-tester.service';
 import { OwnershipService } from '@/services/ownership.service';
-import { ProjectService } from '@/services/project.service';
+import { ProjectService } from '@/services/project.service.ee';
 import { RoleService } from '@/services/role.service';
 
 export type CredentialsGetSharedOptions =

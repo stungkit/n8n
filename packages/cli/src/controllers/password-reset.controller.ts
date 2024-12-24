@@ -1,4 +1,5 @@
 import { Response } from 'express';
+import { Logger } from 'n8n-core';
 import validator from 'validator';
 
 import { AuthService } from '@/auth/auth.service';
@@ -13,12 +14,11 @@ import { UnprocessableRequestError } from '@/errors/response-errors/unprocessabl
 import { EventService } from '@/events/event.service';
 import { ExternalHooks } from '@/external-hooks';
 import { License } from '@/license';
-import { Logger } from '@/logging/logger.service';
 import { MfaService } from '@/mfa/mfa.service';
 import { PasswordResetRequest } from '@/requests';
 import { PasswordUtility } from '@/services/password.utility';
 import { UserService } from '@/services/user.service';
-import { isSamlCurrentAuthenticationMethod } from '@/sso/sso-helpers';
+import { isSamlCurrentAuthenticationMethod } from '@/sso.ee/sso-helpers';
 import { UserManagementMailer } from '@/user-management/email';
 
 @RestController()
@@ -171,7 +171,7 @@ export class PasswordResetController {
 	 */
 	@Post('/change-password', { skipAuth: true })
 	async changePassword(req: PasswordResetRequest.NewPassword, res: Response) {
-		const { token, password, mfaToken } = req.body;
+		const { token, password, mfaCode } = req.body;
 
 		if (!token || !password) {
 			this.logger.debug(
@@ -189,11 +189,11 @@ export class PasswordResetController {
 		if (!user) throw new NotFoundError('');
 
 		if (user.mfaEnabled) {
-			if (!mfaToken) throw new BadRequestError('If MFA enabled, mfaToken is required.');
+			if (!mfaCode) throw new BadRequestError('If MFA enabled, mfaCode is required.');
 
 			const { decryptedSecret: secret } = await this.mfaService.getSecretAndRecoveryCodes(user.id);
 
-			const validToken = this.mfaService.totp.verifySecret({ secret, token: mfaToken });
+			const validToken = this.mfaService.totp.verifySecret({ secret, mfaCode });
 
 			if (!validToken) throw new BadRequestError('Invalid MFA token.');
 		}

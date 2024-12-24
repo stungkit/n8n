@@ -1,11 +1,11 @@
 import { TaskRunnersConfig } from '@n8n/config';
+import { Logger } from 'n8n-core';
 import * as a from 'node:assert/strict';
 import { spawn } from 'node:child_process';
 import * as process from 'node:process';
 import { Service } from 'typedi';
 
 import { OnShutdown } from '@/decorators/on-shutdown';
-import { Logger } from '@/logging/logger.service';
 
 import { TaskRunnerAuthService } from './auth/task-runner-auth.service';
 import { forwardToLogger } from './forward-to-logger';
@@ -28,17 +28,17 @@ export type TaskRunnerProcessEventMap = {
  */
 @Service()
 export class TaskRunnerProcess extends TypedEmitter<TaskRunnerProcessEventMap> {
-	public get isRunning() {
+	get isRunning() {
 		return this.process !== null;
 	}
 
 	/** The process ID of the task runner process */
-	public get pid() {
+	get pid() {
 		return this.process?.pid;
 	}
 
 	/** Promise that resolves when the process has exited */
-	public get runPromise() {
+	get runPromise() {
 		return this._runPromise;
 	}
 
@@ -54,6 +54,7 @@ export class TaskRunnerProcess extends TypedEmitter<TaskRunnerProcessEventMap> {
 
 	private readonly passthroughEnvVars = [
 		'PATH',
+		'GENERIC_TIMEZONE',
 		'NODE_FUNCTION_ALLOW_BUILTIN',
 		'NODE_FUNCTION_ALLOW_EXTERNAL',
 		'N8N_SENTRY_DSN',
@@ -94,19 +95,19 @@ export class TaskRunnerProcess extends TypedEmitter<TaskRunnerProcessEventMap> {
 
 		const grantToken = await this.authService.createGrantToken();
 
-		const n8nUri = `127.0.0.1:${this.runnerConfig.port}`;
-		this.process = this.startNode(grantToken, n8nUri);
+		const taskBrokerUri = `http://127.0.0.1:${this.runnerConfig.port}`;
+		this.process = this.startNode(grantToken, taskBrokerUri);
 
 		forwardToLogger(this.logger, this.process, '[Task Runner]: ');
 
 		this.monitorProcess(this.process);
 	}
 
-	startNode(grantToken: string, n8nUri: string) {
+	startNode(grantToken: string, taskBrokerUri: string) {
 		const startScript = require.resolve('@n8n/task-runner/start');
 
 		return spawn('node', [startScript], {
-			env: this.getProcessEnvVars(grantToken, n8nUri),
+			env: this.getProcessEnvVars(grantToken, taskBrokerUri),
 		});
 	}
 
@@ -158,10 +159,10 @@ export class TaskRunnerProcess extends TypedEmitter<TaskRunnerProcessEventMap> {
 		}
 	}
 
-	private getProcessEnvVars(grantToken: string, n8nUri: string) {
+	private getProcessEnvVars(grantToken: string, taskBrokerUri: string) {
 		const envVars: Record<string, string> = {
 			N8N_RUNNERS_GRANT_TOKEN: grantToken,
-			N8N_RUNNERS_N8N_URI: n8nUri,
+			N8N_RUNNERS_TASK_BROKER_URI: taskBrokerUri,
 			N8N_RUNNERS_MAX_PAYLOAD: this.runnerConfig.maxPayload.toString(),
 			N8N_RUNNERS_MAX_CONCURRENCY: this.runnerConfig.maxConcurrency.toString(),
 			...this.getPassthroughEnvVars(),

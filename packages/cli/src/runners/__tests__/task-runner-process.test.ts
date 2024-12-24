@@ -1,8 +1,8 @@
 import { TaskRunnersConfig } from '@n8n/config';
 import { mock } from 'jest-mock-extended';
+import { Logger } from 'n8n-core';
 import type { ChildProcess, SpawnOptions } from 'node:child_process';
 
-import { Logger } from '@/logging/logger.service';
 import type { TaskRunnerAuthService } from '@/runners/auth/task-runner-auth.service';
 import { TaskRunnerProcess } from '@/runners/task-runner-process';
 import { mockInstance } from '@test/mocking';
@@ -76,6 +76,7 @@ describe('TaskRunnerProcess', () => {
 			'N8N_VERSION',
 			'ENVIRONMENT',
 			'DEPLOYMENT_NAME',
+			'GENERIC_TIMEZONE',
 		])('should propagate %s from env as is', async (envVar) => {
 			jest.spyOn(authService, 'createGrantToken').mockResolvedValue('grantToken');
 			process.env[envVar] = 'custom value';

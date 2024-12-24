@@ -1,4 +1,5 @@
 import { Response } from 'express';
+import { Logger } from 'n8n-core';
 import validator from 'validator';
 
 import { AuthService } from '@/auth/auth.service';
@@ -12,12 +13,11 @@ import { ForbiddenError } from '@/errors/response-errors/forbidden.error';
 import { EventService } from '@/events/event.service';
 import { ExternalHooks } from '@/external-hooks';
 import { License } from '@/license';
-import { Logger } from '@/logging/logger.service';
 import { PostHogClient } from '@/posthog';
 import { UserRequest } from '@/requests';
 import { PasswordUtility } from '@/services/password.utility';
 import { UserService } from '@/services/user.service';
-import { isSamlLicensedAndEnabled } from '@/sso/saml/saml-helpers';
+import { isSamlLicensedAndEnabled } from '@/sso.ee/saml/saml-helpers';
 
 @RestController('/invitations')
 export class InvitationController {

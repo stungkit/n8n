@@ -1,6 +1,6 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
-
 import type { CallbackManager as CallbackManagerLC } from '@langchain/core/callbacks/manager';
+import type { LogScope } from '@n8n/config';
 import type { AxiosProxyConfig, GenericAbortSignal } from 'axios';
 import type * as express from 'express';
 import type FormData from 'form-data';
@@ -364,7 +364,8 @@ export interface ICredentialDataDecryptedObject {
 
 // First array index: The output/input-index (if node has multiple inputs/outputs of the same type)
 // Second array index: The different connections (if one node is connected to multiple nodes)
-export type NodeInputConnections = IConnection[][];
+// Any index can be null, for example in a switch node with multiple indexes some of which are not connected
+export type NodeInputConnections = Array<IConnection[] | null>;
 
 export interface INodeConnection {
 	sourceIndex: number;
@@ -419,60 +420,6 @@ export interface IGetExecuteTriggerFunctions {
 export interface IRunNodeResponse {
 	data: INodeExecutionData[][] | NodeExecutionOutput | null | undefined;
 	closeFunction?: CloseFunction;
-}
-export interface IGetExecuteFunctions {
-	(
-		workflow: Workflow,
-		runExecutionData: IRunExecutionData,
-		runIndex: number,
-		connectionInputData: INodeExecutionData[],
-		inputData: ITaskDataConnections,
-		node: INode,
-		additionalData: IWorkflowExecuteAdditionalData,
-		executeData: IExecuteData,
-		mode: WorkflowExecuteMode,
-		closeFunctions: CloseFunction[],
-		abortSignal?: AbortSignal,
-	): IExecuteFunctions;
-}
-
-export interface IGetExecuteSingleFunctions {
-	(
-		workflow: Workflow,
-		runExecutionData: IRunExecutionData,
-		runIndex: number,
-		connectionInputData: INodeExecutionData[],
-		inputData: ITaskDataConnections,
-		node: INode,
-		itemIndex: number,
-		additionalData: IWorkflowExecuteAdditionalData,
-		executeData: IExecuteData,
-		mode: WorkflowExecuteMode,
-		abortSignal?: AbortSignal,
-	): IExecuteSingleFunctions;
-}
-
-export interface IGetExecuteHookFunctions {
-	(
-		workflow: Workflow,
-		node: INode,
-		additionalData: IWorkflowExecuteAdditionalData,
-		mode: WorkflowExecuteMode,
-		activation: WorkflowActivateMode,
-		webhookData?: IWebhookData,
-	): IHookFunctions;
-}
-
-export interface IGetExecuteWebhookFunctions {
-	(
-		workflow: Workflow,
-		node: INode,
-		additionalData: IWorkflowExecuteAdditionalData,
-		mode: WorkflowExecuteMode,
-		webhookData: IWebhookData,
-		closeFunctions: CloseFunction[],
-		runExecutionData: IRunExecutionData | null,
-	): IWebhookFunctions;
 }
 
 export interface ISourceDataConnections {
@@ -728,6 +675,7 @@ export type ICredentialTestFunction = (
 ) => Promise<INodeCredentialTestResult>;
 
 export interface ICredentialTestFunctions {
+	logger: Logger;
 	helpers: SSHTunnelFunctions & {
 		request: (uriOrObject: string | object, options?: object) => Promise<any>;
 	};
@@ -902,6 +850,7 @@ export type NodeTypeAndVersion = {
 	name: string;
 	type: string;
 	typeVersion: number;
+	disabled: boolean;
 };
 
 export interface FunctionsBase {
@@ -942,7 +891,7 @@ type BaseExecutionFunctions = FunctionsBaseWithRequiredKeys<'getMode'> & {
 	getContext(type: ContextType): IContextObject;
 	getExecuteData(): IExecuteData;
 	getWorkflowDataProxy(itemIndex: number): IWorkflowDataProxyData;
-	getInputSourceData(inputIndex?: number, inputName?: string): ISourceData;
+	getInputSourceData(inputIndex?: number, connectionType?: NodeConnectionType): ISourceData;
 	getExecutionCancelSignal(): AbortSignal | undefined;
 	onExecutionCancellation(handler: () => unknown): void;
 	logAiEvent(eventName: AiEvent, msg?: string | undefined): void;
@@ -961,11 +910,11 @@ export type IExecuteFunctions = ExecuteFunctions.GetNodeParameterFn &
 			},
 		): Promise<ExecuteWorkflowData>;
 		getInputConnectionData(
-			inputName: NodeConnectionType,
+			connectionType: AINodeConnectionType,
 			itemIndex: number,
 			inputIndex?: number,
 		): Promise<unknown>;
-		getInputData(inputIndex?: number, inputName?: string): INodeExecutionData[];
+		getInputData(inputIndex?: number, connectionType?: NodeConnectionType): INodeExecutionData[];
 		getNodeInputs(): INodeInputConfiguration[];
 		getNodeOutputs(): INodeOutputConfiguration[];
 		putExecutionToWait(waitTill: Date): Promise<void>;
@@ -999,6 +948,7 @@ export type IExecuteFunctions = ExecuteFunctions.GetNodeParameterFn &
 				): NodeExecutionWithMetadata[];
 				assertBinaryData(itemIndex: number, propertyName: string): IBinaryData;
 				getBinaryDataBuffer(itemIndex: number, propertyName: string): Promise<Buffer>;
+				detectBinaryEncoding(buffer: Buffer): string;
 				copyInputItems(items: INodeExecutionData[], properties: string[]): IDataObject[];
 			};
 
@@ -1012,7 +962,7 @@ export type IExecuteFunctions = ExecuteFunctions.GetNodeParameterFn &
 	};
 
 export interface IExecuteSingleFunctions extends BaseExecutionFunctions {
-	getInputData(inputIndex?: number, inputName?: string): INodeExecutionData;
+	getInputData(inputIndex?: number, connectionType?: NodeConnectionType): INodeExecutionData;
 	getItemIndex(): number;
 	getNodeParameter(
 		parameterName: string,
@@ -1025,6 +975,7 @@ export interface IExecuteSingleFunctions extends BaseExecutionFunctions {
 		BinaryHelperFunctions & {
 			assertBinaryData(propertyName: string, inputIndex?: number): IBinaryData;
 			getBinaryDataBuffer(propertyName: string, inputIndex?: number): Promise<Buffer>;
+			detectBinaryEncoding(buffer: Buffer): string;
 		};
 }
 
@@ -1067,7 +1018,21 @@ export interface ILoadOptionsFunctions extends FunctionsBase {
 		options?: IGetNodeParameterOptions,
 	): NodeParameterValueType | object | undefined;
 	getCurrentNodeParameters(): INodeParameters | undefined;
+
 	helpers: RequestHelperFunctions & SSHTunnelFunctions;
+}
+
+export type FieldValueOption = { name: string; type: FieldType | 'any' };
+
+export type IWorkflowNodeContext = ExecuteFunctions.GetNodeParameterFn &
+	Pick<FunctionsBase, 'getNode'>;
+
+export interface ILocalLoadOptionsFunctions {
+	getWorkflowNodeContext(nodeType: string): Promise<IWorkflowNodeContext | null>;
+}
+
+export interface IWorkflowLoader {
+	get(workflowId: string): Promise<IWorkflowBase>;
 }
 
 export interface IPollFunctions
@@ -1126,7 +1091,7 @@ export interface IWebhookFunctions extends FunctionsBaseWithRequiredKeys<'getMod
 	getBodyData(): IDataObject;
 	getHeaderData(): IncomingHttpHeaders;
 	getInputConnectionData(
-		inputName: NodeConnectionType,
+		connectionType: AINodeConnectionType,
 		itemIndex: number,
 		inputIndex?: number,
 	): Promise<unknown>;
@@ -1224,10 +1189,6 @@ export interface INodeExecutionData {
 export interface INodeExecuteFunctions {
 	getExecutePollFunctions: IGetExecutePollFunctions;
 	getExecuteTriggerFunctions: IGetExecuteTriggerFunctions;
-	getExecuteFunctions: IGetExecuteFunctions;
-	getExecuteSingleFunctions: IGetExecuteSingleFunctions;
-	getExecuteHookFunctions: IGetExecuteHookFunctions;
-	getExecuteWebhookFunctions: IGetExecuteWebhookFunctions;
 }
 
 export type NodeParameterValue = string | number | boolean | undefined | null;
@@ -1347,14 +1308,18 @@ export interface INodePropertyTypeOptions {
 	resourceMapper?: ResourceMapperTypeOptions;
 	filter?: FilterTypeOptions;
 	assignment?: AssignmentTypeOptions;
+	minRequiredFields?: number; // Supported by: fixedCollection
+	maxAllowedFields?: number; // Supported by: fixedCollection
 	[key: string]: any;
 }
 
-export interface ResourceMapperTypeOptions {
-	resourceMapperMethod: string;
-	mode: 'add' | 'update' | 'upsert';
+export interface ResourceMapperTypeOptionsBase {
+	mode: 'add' | 'update' | 'upsert' | 'map';
 	valuesLabel?: string;
-	fieldWords?: { singular: string; plural: string };
+	fieldWords?: {
+		singular: string;
+		plural: string;
+	};
 	addAllFields?: boolean;
 	noFieldsError?: string;
 	multiKeyMatch?: boolean;
@@ -1364,7 +1329,22 @@ export interface ResourceMapperTypeOptions {
 		description?: string;
 		hint?: string;
 	};
+	showTypeConversionOptions?: boolean;
 }
+
+// Enforce at least one of resourceMapperMethod or localResourceMapperMethod
+export type ResourceMapperTypeOptionsLocal = {
+	resourceMapperMethod: string;
+	localResourceMapperMethod?: never; // Explicitly disallows this property
+};
+
+export type ResourceMapperTypeOptionsExternal = {
+	localResourceMapperMethod: string;
+	resourceMapperMethod?: never; // Explicitly disallows this property
+};
+
+export type ResourceMapperTypeOptions = ResourceMapperTypeOptionsBase &
+	(ResourceMapperTypeOptionsLocal | ResourceMapperTypeOptionsExternal);
 
 type NonEmptyArray<T> = [T, ...T[]];
 
@@ -1558,6 +1538,7 @@ export interface ITriggerResponse {
 export interface ExecuteWorkflowData {
 	executionId: string;
 	data: Array<INodeExecutionData[] | null>;
+	waitTill?: Date | null;
 }
 
 export type WebhookSetupMethodNames = 'checkExists' | 'create' | 'delete';
@@ -1635,6 +1616,9 @@ export interface INodeType {
 		};
 		resourceMapping?: {
 			[functionName: string]: (this: ILoadOptionsFunctions) => Promise<ResourceMapperFields>;
+		};
+		localResourceMapping?: {
+			[functionName: string]: (this: ILocalLoadOptionsFunctions) => Promise<ResourceMapperFields>;
 		};
 		actionHandler?: {
 			[functionName: string]: (
@@ -1860,29 +1844,20 @@ export interface IPostReceiveSort extends IPostReceiveBase {
 
 export const enum NodeConnectionType {
 	AiAgent = 'ai_agent',
-
 	AiChain = 'ai_chain',
-
 	AiDocument = 'ai_document',
-
 	AiEmbedding = 'ai_embedding',
-
 	AiLanguageModel = 'ai_languageModel',
-
 	AiMemory = 'ai_memory',
-
 	AiOutputParser = 'ai_outputParser',
-
 	AiRetriever = 'ai_retriever',
-
 	AiTextSplitter = 'ai_textSplitter',
-
 	AiTool = 'ai_tool',
-
 	AiVectorStore = 'ai_vectorStore',
-
 	Main = 'main',
 }
+
+export type AINodeConnectionType = Exclude<NodeConnectionType, NodeConnectionType.Main>;
 
 export const nodeConnectionTypes: NodeConnectionType[] = [
 	NodeConnectionType.AiAgent,
@@ -2013,7 +1988,6 @@ export interface IWebhookDescription {
 	responseData?: WebhookResponseData | string;
 	restartWebhook?: boolean;
 	isForm?: boolean;
-	hasLifecycleMethods?: boolean; // set automatically by generate-ui-types
 	ndvHideUrl?: string | boolean; // If true the webhook will not be displayed in the editor
 	ndvHideMethod?: string | boolean; // If true the method will not be displayed in the editor
 }
@@ -2055,7 +2029,28 @@ export interface IWorkflowDataProxyData {
 	constructor: any;
 }
 
-export type IWorkflowDataProxyAdditionalKeys = IDataObject;
+export type IWorkflowDataProxyAdditionalKeys = IDataObject & {
+	$execution?: {
+		id: string;
+		mode: 'test' | 'production';
+		resumeUrl: string;
+		resumeFormUrl: string;
+		customData?: {
+			set(key: string, value: string): void;
+			setAll(obj: Record<string, string>): void;
+			get(key: string): string;
+			getAll(): Record<string, string>;
+		};
+	};
+	$vars?: IDataObject;
+	$secrets?: IDataObject;
+	$pageCount?: number;
+
+	/** @deprecated */
+	$executionId?: string;
+	/** @deprecated */
+	$resumeWebhookUrl?: string;
+};
 
 export interface IWorkflowMetadata {
 	id?: string;
@@ -2142,6 +2137,7 @@ export interface IRunExecutionData {
 		waitingExecution: IWaitingForExecution;
 		waitingExecutionSource: IWaitingForExecutionSource | null;
 	};
+	parentExecution?: RelatedExecution;
 	waitTill?: Date;
 	pushRef?: string;
 }
@@ -2283,6 +2279,10 @@ export interface IWorkflowExecutionDataProcess {
 	 */
 	partialExecutionVersion?: string;
 	dirtyNodeNames?: string[];
+	triggerToStartFrom?: {
+		name: string;
+		data?: ITaskData;
+	};
 }
 
 export interface ExecuteWorkflowOptions {
@@ -2366,9 +2366,6 @@ export interface IWorkflowExecuteAdditionalData {
 		mode: WorkflowExecuteMode,
 		envProviderState: EnvProviderState,
 		executeData?: IExecuteData,
-		defaultReturnRunIndex?: number,
-		selfData?: IDataObject,
-		contextNodeName?: string,
 	): Promise<Result<T, E>>;
 }
 
@@ -2451,7 +2448,17 @@ export interface WorkflowTestData {
 }
 
 export type LogLevel = (typeof LOG_LEVELS)[number];
-export type Logger = Record<Exclude<LogLevel, 'silent'>, (message: string, meta?: object) => void>;
+export type LogMetadata = {
+	[key: string]: unknown;
+	scopes?: LogScope[];
+	file?: string;
+	function?: string;
+};
+export type Logger = Record<
+	Exclude<LogLevel, 'silent'>,
+	(message: string, metadata?: LogMetadata) => void
+>;
+export type LogLocationMetadata = Pick<LogMetadata, 'file' | 'function'>;
 
 export interface IStatusCodeMessages {
 	[key: string]: string;
@@ -2691,6 +2698,9 @@ export type ResourceMapperValue = {
 	value: { [key: string]: string | number | boolean | null } | null;
 	matchingColumns: string[];
 	schema: ResourceMapperField[];
+	ignoreTypeMismatchErrors: boolean;
+	attemptToConvertTypes: boolean;
+	convertFieldsToString: boolean;
 };
 
 export type FilterOperatorType =
@@ -2772,6 +2782,7 @@ export interface IUserSettings {
 	userActivatedAt?: number;
 	allowSSOManualLogin?: boolean;
 	npsSurvey?: NpsSurveyState;
+	easyAIWorkflowOnboarded?: boolean;
 }
 
 export interface IProcessedDataConfig {

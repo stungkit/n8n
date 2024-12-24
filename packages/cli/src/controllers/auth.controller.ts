@@ -1,4 +1,5 @@
 import { Response } from 'express';
+import { Logger } from 'n8n-core';
 import { ApplicationError } from 'n8n-workflow';
 import validator from 'validator';
 
@@ -14,7 +15,6 @@ import { ForbiddenError } from '@/errors/response-errors/forbidden.error';
 import { EventService } from '@/events/event.service';
 import type { PublicUser } from '@/interfaces';
 import { License } from '@/license';
-import { Logger } from '@/logging/logger.service';
 import { MfaService } from '@/mfa/mfa.service';
 import { PostHogClient } from '@/posthog';
 import { AuthenticatedRequest, LoginRequest, UserRequest } from '@/requests';
@@ -23,7 +23,7 @@ import {
 	getCurrentAuthenticationMethod,
 	isLdapCurrentAuthenticationMethod,
 	isSamlCurrentAuthenticationMethod,
-} from '@/sso/sso-helpers';
+} from '@/sso.ee/sso-helpers';
 
 @RestController()
 export class AuthController {
@@ -41,7 +41,7 @@ export class AuthController {
 	/** Log in a user */
 	@Post('/login', { skipAuth: true, rateLimit: true })
 	async login(req: LoginRequest, res: Response): Promise<PublicUser | undefined> {
-		const { email, password, mfaToken, mfaRecoveryCode } = req.body;
+		const { email, password, mfaCode, mfaRecoveryCode } = req.body;
 		if (!email) throw new ApplicationError('Email is required to log in');
 		if (!password) throw new ApplicationError('Password is required to log in');
 
@@ -75,16 +75,16 @@ export class AuthController {
 
 		if (user) {
 			if (user.mfaEnabled) {
-				if (!mfaToken && !mfaRecoveryCode) {
+				if (!mfaCode && !mfaRecoveryCode) {
 					throw new AuthError('MFA Error', 998);
 				}
 
-				const isMFATokenValid = await this.mfaService.validateMfa(
+				const isMfaCodeOrMfaRecoveryCodeValid = await this.mfaService.validateMfa(
 					user.id,
-					mfaToken,
+					mfaCode,
 					mfaRecoveryCode,
 				);
-				if (!isMFATokenValid) {
+				if (!isMfaCodeOrMfaRecoveryCodeValid) {
 					throw new AuthError('Invalid mfa token or recovery code');
 				}
 			}

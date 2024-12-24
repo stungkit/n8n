@@ -1,5 +1,6 @@
-import type { PushPayload, PushType } from '@n8n/api-types';
+import type { PushMessage } from '@n8n/api-types';
 import { Request } from 'express';
+import { Logger } from 'n8n-core';
 import Container from 'typedi';
 import { v4 as uuid } from 'uuid';
 
@@ -14,7 +15,6 @@ import { MessageEventBus } from '@/eventbus/message-event-bus/message-event-bus'
 import type { BooleanLicenseFeature, NumericLicenseFeature } from '@/interfaces';
 import type { FeatureReturnType } from '@/license';
 import { License } from '@/license';
-import { Logger } from '@/logging/logger.service';
 import { MfaService } from '@/mfa/mfa.service';
 import { Push } from '@/push';
 import type { UserSetupPayload } from '@/requests';
@@ -58,14 +58,12 @@ type ResetRequest = Request<
 	}
 >;
 
-type PushRequest<T extends PushType> = Request<
+type PushRequest = Request<
 	{},
 	{},
 	{
-		type: T;
 		pushRef: string;
-		data: PushPayload<T>;
-	}
+	} & PushMessage
 >;
 
 @RestController('/e2e')
@@ -144,8 +142,9 @@ export class E2EController {
 	}
 
 	@Post('/push', { skipAuth: true })
-	async pushSend(req: PushRequest<any>) {
-		this.push.broadcast(req.body.type, req.body.data);
+	async pushSend(req: PushRequest) {
+		const { pushRef: _, ...pushMsg } = req.body;
+		this.push.broadcast(pushMsg);
 	}
 
 	@Patch('/feature', { skipAuth: true })
