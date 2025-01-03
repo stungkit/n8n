@@ -101,6 +101,7 @@ import type {
 	AddedNodesAndConnections,
 	ToggleNodeCreatorOptions,
 	NodeFilterType,
+	WorkflowDataWithTemplateId,
 } from '@/Interface';
 
 import { type RouteLocation, useRoute, useRouter } from 'vue-router';
@@ -180,6 +181,7 @@ import { useNpsSurveyStore } from '@/stores/npsSurvey.store';
 import { getResourcePermissions } from '@/permissions';
 import { useBeforeUnload } from '@/composables/useBeforeUnload';
 import NodeViewUnfinishedWorkflowMessage from '@/components/NodeViewUnfinishedWorkflowMessage.vue';
+import { EASY_AI_WORKFLOW_JSON } from '@/constants.workflows';
 
 interface AddNodeOptions {
 	position?: XYPosition;
@@ -825,7 +827,7 @@ export default defineComponent({
 							: 'readOnly.showMessage.executions.message',
 					),
 					type: 'info',
-					dangerouslyUseHTMLString: true,
+
 					onClose: () => {
 						this.readOnlyNotification = null;
 					},
@@ -934,7 +936,6 @@ export default defineComponent({
 						// Close the creator panel if user clicked on the link
 						if (this.createNodeActive) notice.close();
 					}, 0),
-				dangerouslyUseHTMLString: true,
 			});
 		},
 		async clearExecutionData() {
@@ -1090,6 +1091,42 @@ export default defineComponent({
 			}
 			await this.$nextTick();
 			this.canvasStore.zoomToFit();
+		},
+		async openWorkflowTemplateFromJson(data: { workflow: WorkflowDataWithTemplateId }) {
+			if (!data.workflow.nodes || !data.workflow.connections) {
+				this.showError(
+					new Error(this.i18n.baseText('nodeView.couldntLoadWorkflow.invalidWorkflowObject')),
+					this.i18n.baseText('nodeView.couldntImportWorkflow'),
+				);
+				await this.$router.replace({ name: VIEWS.NEW_WORKFLOW });
+				return;
+			}
+			this.canvasStore.startLoading();
+			this.canvasStore.setLoadingText(this.i18n.baseText('nodeView.loadingTemplate'));
+			this.resetWorkspace();
+
+			this.workflowsStore.currentWorkflowExecutions = [];
+			this.executionsStore.activeExecution = null;
+
+			this.blankRedirect = true;
+			await this.$router.replace({
+				name: VIEWS.NEW_WORKFLOW,
+				query: { templateId: data.workflow.meta.templateId },
+			});
+
+			const convertedNodes = data.workflow.nodes.map(
+				this.workflowsStore.convertTemplateNodeToNodeUi,
+			);
+			await this.nodeHelpers.addNodes(convertedNodes, data.workflow.connections);
+			this.workflowData =
+				(await this.workflowsStore.getNewWorkflowData(
+					data.workflow.name,
+					this.projectsStore.currentProjectId,
+				)) || {};
+			await this.$nextTick();
+			this.canvasStore.zoomToFit();
+			this.uiStore.stateIsDirty = true;
+			this.canvasStore.stopLoading();
 		},
 		async openWorkflowTemplate(templateId: string) {
 			this.canvasStore.startLoading();
@@ -1394,7 +1431,11 @@ export default defineComponent({
 					lastSelectedNode.name,
 				);
 
-				if (connections.main === undefined || connections.main.length === 0) {
+				if (
+					connections.main === undefined ||
+					connections.main.length === 0 ||
+					!connections.main[0]
+				) {
 					return;
 				}
 
@@ -1428,7 +1469,11 @@ export default defineComponent({
 
 				const connections = workflow.connectionsByDestinationNode[lastSelectedNode.name];
 
-				if (connections.main === undefined || connections.main.length === 0) {
+				if (
+					connections.main === undefined ||
+					connections.main.length === 0 ||
+					!connections.main[0]
+				) {
 					return;
 				}
 
@@ -1460,7 +1505,11 @@ export default defineComponent({
 					return;
 				}
 
-				const parentNode = connections.main[0][0].node;
+				const parentNode = connections.main[0]?.[0].node;
+				if (!parentNode) {
+					return;
+				}
+
 				const connectionsParent = this.workflowsStore.outgoingConnectionsByNodeName(parentNode);
 
 				if (!Array.isArray(connectionsParent.main) || !connectionsParent.main.length) {
@@ -1472,7 +1521,7 @@ export default defineComponent({
 				let lastCheckedNodePosition = e.key === 'ArrowUp' ? -99999999 : 99999999;
 				let nextSelectNode: string | null = null;
 				for (const ouputConnections of connectionsParent.main) {
-					for (const ouputConnection of ouputConnections) {
+					for (const ouputConnection of ouputConnections ?? []) {
 						if (ouputConnection.node === lastSelectedNode.name) {
 							// Ignore current node
 							continue;
@@ -1815,7 +1864,6 @@ export default defineComponent({
 							cancelButtonText: this.i18n.baseText(
 								'nodeView.confirmMessage.onClipboardPasteEvent.cancelButtonText',
 							),
-							dangerouslyUseHTMLString: true,
 						},
 					);
 
@@ -2046,10 +2094,7 @@ export default defineComponent({
 			);
 			if (dropData) {
 				const mousePosition = this.getMousePositionWithinNodeView(event);
-				const insertNodePosition = [
-					mousePosition[0] - NodeViewUtils.NODE_SIZE / 2 + NodeViewUtils.GRID_SIZE,
-					mousePosition[1] - NodeViewUtils.NODE_SIZE / 2,
-				] as XYPosition;
+				const insertNodePosition: XYPosition = [mousePosition[0], mousePosition[1]];
 
 				await this.onAddNodes(dropData, true, insertNodePosition);
 				this.createNodeActive = false;
@@ -3354,7 +3399,12 @@ export default defineComponent({
 				this.blankRedirect = false;
 			} else if (this.$route.name === VIEWS.TEMPLATE_IMPORT) {
 				const templateId = this.$route.params.id;
-				await this.openWorkflowTemplate(templateId.toString());
+				const loadWorkflowFromJSON = this.$route.query.fromJson === 'true';
+				if (loadWorkflowFromJSON) {
+					await this.openWorkflowTemplateFromJson({ workflow: EASY_AI_WORKFLOW_JSON });
+				} else {
+					await this.openWorkflowTemplate(templateId.toString());
+				}
 			} else {
 				if (
 					this.uiStore.stateIsDirty &&
@@ -3877,13 +3927,10 @@ export default defineComponent({
 						sourceIndex++
 					) {
 						const nodeSourceConnections = [];
-						if (currentConnections[sourceNode][type][sourceIndex]) {
-							for (
-								connectionIndex = 0;
-								connectionIndex < currentConnections[sourceNode][type][sourceIndex].length;
-								connectionIndex++
-							) {
-								connectionData = currentConnections[sourceNode][type][sourceIndex][connectionIndex];
+						const connections = currentConnections[sourceNode][type][sourceIndex];
+						if (connections) {
+							for (connectionIndex = 0; connectionIndex < connections.length; connectionIndex++) {
+								connectionData = connections[connectionIndex];
 								if (!createNodeNames.includes(connectionData.node)) {
 									// Node does not get created so skip input connection
 									continue;
@@ -4013,14 +4060,17 @@ export default defineComponent({
 				for (type of Object.keys(connections)) {
 					for (sourceIndex = 0; sourceIndex < connections[type].length; sourceIndex++) {
 						connectionToKeep = [];
-						for (
-							connectionIndex = 0;
-							connectionIndex < connections[type][sourceIndex].length;
-							connectionIndex++
-						) {
-							connectionData = connections[type][sourceIndex][connectionIndex];
-							if (exportNodeNames.indexOf(connectionData.node) !== -1) {
-								connectionToKeep.push(connectionData);
+						const connectionsToCheck = connections[type][sourceIndex];
+						if (connectionsToCheck) {
+							for (
+								connectionIndex = 0;
+								connectionIndex < connectionsToCheck.length;
+								connectionIndex++
+							) {
+								connectionData = connectionsToCheck[connectionIndex];
+								if (exportNodeNames.indexOf(connectionData.node) !== -1) {
+									connectionToKeep.push(connectionData);
+								}
 							}
 						}
 

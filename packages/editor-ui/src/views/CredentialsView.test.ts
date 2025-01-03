@@ -35,7 +35,9 @@ const initialState = {
 	},
 };
 
-const renderComponent = createComponentRenderer(CredentialsView);
+const renderComponent = createComponentRenderer(CredentialsView, {
+	global: { stubs: { ProjectHeader: true } },
+});
 let router: ReturnType<typeof useRouter>;
 
 describe('CredentialsView', () => {
@@ -57,6 +59,7 @@ describe('CredentialsView', () => {
 				type: 'test',
 				createdAt: '2021-05-05T00:00:00Z',
 				updatedAt: '2021-05-05T00:00:00Z',
+				isManaged: false,
 			},
 		];
 		const projectsStore = mockedStore(useProjectsStore);
@@ -75,6 +78,7 @@ describe('CredentialsView', () => {
 				createdAt: '2021-05-05T00:00:00Z',
 				updatedAt: '2021-05-05T00:00:00Z',
 				scopes: ['credential:update'],
+				isManaged: false,
 			},
 			{
 				id: '2',
@@ -82,6 +86,7 @@ describe('CredentialsView', () => {
 				type: 'test2',
 				createdAt: '2021-05-05T00:00:00Z',
 				updatedAt: '2021-05-05T00:00:00Z',
+				isManaged: false,
 			},
 		];
 		const projectsStore = mockedStore(useProjectsStore);
@@ -122,6 +127,7 @@ describe('CredentialsView', () => {
 					createdAt: '2021-05-05T00:00:00Z',
 					updatedAt: '2021-05-05T00:00:00Z',
 					scopes: ['credential:update'],
+					isManaged: false,
 				},
 			];
 			const { getByTestId } = renderComponent();
