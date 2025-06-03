@@ -19,7 +19,7 @@ import {
 import { defineStore } from 'pinia';
 import { v4 as uuid } from 'uuid';
 import { computed, nextTick, ref } from 'vue';
-import difference from 'lodash-es/difference';
+import difference from 'lodash/difference';
 
 import { useNodeCreatorStore } from '@/stores/nodeCreator.store';
 
@@ -36,7 +36,7 @@ import {
 
 import type { NodeViewItem, NodeViewItemSection } from '@/components/Node/NodeCreator/viewsData';
 import { AINodesView } from '@/components/Node/NodeCreator/viewsData';
-import { useI18n } from '@/composables/useI18n';
+import { useI18n } from '@n8n/i18n';
 import { useKeyboardNavigation } from './useKeyboardNavigation';
 
 import { useNodeTypesStore } from '@/stores/nodeTypes.store';
@@ -51,6 +51,8 @@ export type CommunityNodeDetails = {
 	description: string;
 	packageName: string;
 	installed: boolean;
+	official: boolean;
+	companyName?: string;
 	nodeIcon?: NodeIconSource;
 };
 
