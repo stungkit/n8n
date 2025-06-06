@@ -1,4 +1,4 @@
-ARG NODE_VERSION=20
+ARG NODE_VERSION=22
 ARG N8N_VERSION=snapshot
 
 # 1. Create an image to build n8n
@@ -67,6 +67,7 @@ RUN \
 
 # Install npm 11.4.1 to fix the vulnerable cross-spawn dependency
 RUN npm install -g npm@11.4.1
+RUN apk --purge del apk-tools
 
 ENV SHELL /bin/sh
 USER node

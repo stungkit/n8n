@@ -161,7 +161,8 @@ const externalHooks = useExternalHooks();
 const toast = useToast();
 const message = useMessage();
 const documentTitle = useDocumentTitle();
-const workflowHelpers = useWorkflowHelpers({ router });
+const workflowHelpers = useWorkflowHelpers();
+const workflowSaving = useWorkflowSaving({ router });
 const nodeHelpers = useNodeHelpers();
 
 const nodeTypesStore = useNodeTypesStore();
@@ -237,7 +238,7 @@ const {
 	editableWorkflowObject,
 	lastClickPosition,
 	startChat,
-} = useCanvasOperations({ router });
+} = useCanvasOperations();
 const { extractWorkflow } = useWorkflowExtraction();
 const { applyExecutionData } = useExecutionDebugging();
 useClipboard({ onPaste: onClipboardPaste });
@@ -818,7 +819,7 @@ async function onSaveWorkflow() {
 	if (workflowIsSaved || workflowIsArchived) {
 		return;
 	}
-	const saved = await workflowHelpers.saveCurrentWorkflow();
+	const saved = await workflowSaving.saveCurrentWorkflow();
 	if (saved) {
 		canvasEventBus.emit('saved:workflow');
 	}
@@ -2023,15 +2024,20 @@ onBeforeUnmount(() => {
 				:waiting-for-webhook="isExecutionWaitingForWebhook"
 				:disabled="isExecutionDisabled"
 				:executing="isWorkflowRunning"
+				:trigger-nodes="triggerNodes"
+				:get-node-type="nodeTypesStore.getNodeType"
+				:selected-trigger-node-name="workflowsStore.selectedTriggerNodeName"
 				@mouseenter="onRunWorkflowButtonMouseEnter"
 				@mouseleave="onRunWorkflowButtonMouseLeave"
-				@click="runEntireWorkflow('main')"
+				@execute="runEntireWorkflow('main')"
+				@select-trigger-node="workflowsStore.setSelectedTriggerNodeName"
 			/>
 			<template v-if="containsChatTriggerNodes">
 				<CanvasChatButton
 					v-if="isLogsPanelOpen"
 					type="tertiary"
 					:label="i18n.baseText('chat.hide')"
+					:class="$style.chatButton"
 					@click="logsStore.toggleOpen(false)"
 				/>
 				<KeyboardShortcutTooltip
@@ -2040,8 +2046,9 @@ onBeforeUnmount(() => {
 					:shortcut="{ keys: ['c'] }"
 				>
 					<CanvasChatButton
-						type="primary"
+						:type="isRunWorkflowButtonVisible ? 'secondary' : 'primary'"
 						:label="i18n.baseText('chat.open')"
+						:class="$style.chatButton"
 						@click="onOpenChat"
 					/>
 				</KeyboardShortcutTooltip>
@@ -2135,6 +2142,10 @@ onBeforeUnmount(() => {
 				margin: 0;
 			}
 		}
+	}
+
+	.chatButton {
+		align-self: stretch;
 	}
 }
 
