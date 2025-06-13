@@ -56,7 +56,6 @@ import '@/credentials/credentials.controller';
 import '@/eventbus/event-bus.controller';
 import '@/events/events.controller';
 import '@/executions/executions.controller';
-import '@/external-secrets.ee/external-secrets.controller.ee';
 import '@/license/license.controller';
 import '@/evaluation.ee/test-runs.controller.ee';
 import '@/workflows/workflow-history.ee/workflow-history.controller.ee';
@@ -148,6 +147,20 @@ export class Server extends AbstractServer {
 			await import('@/sso.ee/saml/routes/saml.controller.ee');
 		} catch (error) {
 			this.logger.warn(`SAML initialization failed: ${(error as Error).message}`);
+		}
+
+		// ----------------------------------------
+		// OIDC
+		// ----------------------------------------
+
+		try {
+			if (this.licenseState.isOidcLicensed()) {
+				const { OidcService } = await import('@/sso.ee/oidc/oidc.service.ee');
+				await Container.get(OidcService).init();
+				await import('@/sso.ee/oidc/routes/oidc.controller.ee');
+			}
+		} catch (error) {
+			this.logger.warn(`OIDC initialization failed: ${(error as Error).message}`);
 		}
 
 		// ----------------------------------------

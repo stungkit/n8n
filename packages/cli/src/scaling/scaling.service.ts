@@ -57,6 +57,9 @@ export class ScalingService {
 	async setupQueue() {
 		const { default: BullQueue } = await import('bull');
 		const { RedisClientService } = await import('@/services/redis-client.service');
+
+		if (this.queue) return;
+
 		const service = Container.get(RedisClientService);
 
 		const bullPrefix = this.globalConfig.queue.bull.prefix;
@@ -380,7 +383,7 @@ export class ScalingService {
 	private readonly jobCounters = { completed: 0, failed: 0 };
 
 	/** Interval for collecting queue metrics to expose via Prometheus. */
-	private queueMetricsInterval: NodeJS.Timer | undefined;
+	private queueMetricsInterval: NodeJS.Timeout | undefined;
 
 	get isQueueMetricsEnabled() {
 		return (
